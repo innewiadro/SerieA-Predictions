@@ -27,8 +27,6 @@ matches_data["target"] = (matches_data["result"] == "W").astype("int")
 
 print(matches_data)
 
-
-
 """creating model"""
 from sklearn.ensemble import RandomForestClassifier
 
@@ -66,6 +64,7 @@ grouped_matches = matches_data.groupby("team")
 group = grouped_matches.get_group("Milan")
 print(group)
 
+
 def rolling_averrages(group, cols, new_cols):
     group = group.sort_values("date")
     rolling_stats = group[cols].rolling(3, closed="left").mean()
@@ -86,7 +85,42 @@ matches_rolling = matches_rolling.droplevel("team")
 matches_rolling.index = range(matches_rolling.shape[0])
 
 """retrain"""""
+print(matches_rolling["opponent"].value_counts())
 
 
 def make_predictions(data, predictors):
-    pass
+    train = data[data["date"] < "2021-01-01"]
+    test = data[data["date"] > "2021-01-01"]
+    rf.fit(train[predictors], train["target"])
+    preds = rf.predict(test[predictors])
+    combined = pd.DataFrame(dict(actual=test["target"], predicted=preds), index=test.index)
+    precision = precision_score(test["target"], preds)
+    return combined, precision
+
+
+combined, precision = make_predictions(matches_rolling, predictors + new_cols)
+
+#print(combined, precision)
+
+combined = combined.merge(matches_rolling[["date", "team","opponent", "result"]], left_index=True, right_index=True)
+
+#print(combined)
+
+
+class MissingDict(dict):
+    __missing__ = lambda self, key: key
+
+
+map_values = {"Internazionale": "Inter"}
+
+mapping = MissingDict(**map_values)
+
+combined["new_team"] = combined["team"].map(mapping)
+print(combined)
+
+merged = combined.merge(combined, left_on=["date", "new_team"], right_on=["date", "opponent"])
+
+print(merged)
+
+print(merged[(merged["predicted_x"] == 1) & (merged["predicted_y"] == 0)]["actual_x"].value_counts())
+
